@@ -48,10 +48,13 @@ let MAP_WIDTH;
 let MAP_HEIGHT;
 let MAP_INNER_MARGIN = 20; // Internal margin used for linear projection within the map
 
+// Variabili globali per la posizione della mappa calcolate in draw() e usate in mousePressed()
+let mapYOffset = 0; 
+let mapXStart = 0; 
+
 // Load CSV file in preload phase
 function preload() {
     // Loading the CSV table with headers (assuming file is in the project folder)
-    // NOTE: Replace 'volcanoes-2025-10-27 - Es.3 - Original Data.csv' with your actual file path/name.
     table = loadTable('volcanoes-2025-10-27 - Es.3 - Original Data.csv', 'csv', 'header');
 }
 
@@ -72,10 +75,7 @@ function setup() {
     // Calculate map dimensions respecting aspect ratio 2:1 and vertical constraints
     MAP_WIDTH = min(availableWidthForMap, MAX_MAP_H * 2);
     MAP_HEIGHT = min(MAP_WIDTH / 2, MAX_MAP_H);
-    // Further reduction if necessary
-    MAP_WIDTH = min(MAP_WIDTH, availableWidthForMap);
-    MAP_HEIGHT = MAP_WIDTH / 2;
-
+    
     const maxWidthFromHeight = (AVAILABLE_HEIGHT) * 2;
     MAP_WIDTH = min(MAP_WIDTH, maxWidthFromHeight);
     MAP_HEIGHT = MAP_WIDTH / 2;
@@ -86,9 +86,9 @@ function setup() {
     // Create p5.js canvas and initial configuration
     createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     angleMode(DEGREES);
-    noLoop(); // Draw only on request (for hover/click)
+    noLoop(); 
     
-    // Process CSV data
+    // Process CSV data (unchanged)
     for (let i = 0; i < table.getRowCount(); i++) {
         const row = table.getRow(i);
         const lat = parseFloat(row.getString('Latitude'));
@@ -97,10 +97,8 @@ function setup() {
         const type = row.getString('TypeCategory').trim(); 
         
         let elevation = parseFloat(elevationStr);
-        // Skip rows with missing or invalid data
         if (isNaN(lat) || isNaN(lon) || type === '' || isNaN(elevation)) continue;
 
-        // Push volcano object to the array
         volcanoes.push({
             name: row.getString('Volcano Name'),
             country: row.getString('Country'),
@@ -112,7 +110,6 @@ function setup() {
             status: row.getString('Status')
         });
         
-        // Update min/max elevation and geographic limits
         if (elevation > maxElevation) maxElevation = elevation;
         if (elevation < minElevation) minElevation = elevation;
         if (lat > maxLat) maxLat = lat;
@@ -121,19 +118,18 @@ function setup() {
         if (lon < minLon) minLon = lon;
     }
 
-    // Fallback checks for geographic limits
+    // Fallback checks (unchanged)
     if (!isFinite(minLat) || !isFinite(maxLat)) { minLat = -60; maxLat = 60; }
     if (!isFinite(minLon) || !isFinite(maxLon)) { minLon = -180; maxLon = 180; }
     if (maxLat - minLat < 1) { minLat -= 1; maxLat += 1; }
     if (maxLon - minLon < 1) { minLon -= 1; maxLon += 1; }
 
-    // Initialize type -> glyph map and filter options
     initializeGlyphMap();
     const uniqueTypes = [...new Set(volcanoes.map(v => v.type))].sort();
     filterOptions = ['All Types', ...uniqueTypes];
 }
 
-// Initializes the mapping of volcano types to the 9 glyph indices
+// Initializes the mapping of volcano types to the 9 glyph indices (unchanged)
 function initializeGlyphMap() {
     const uniqueTypes = [...new Set(volcanoes.map(v => v.type))].sort();
     const fallbackIndex = 4; // Diamond for 'others'
@@ -158,29 +154,27 @@ function initializeGlyphMap() {
     });
 }
 
-// X linear projection internal to the map
+// X linear projection internal to the map (unchanged)
 function projectX(lon) {
     const left = MAP_INNER_MARGIN;
     const right = MAP_WIDTH - MAP_INNER_MARGIN;
     let minL = minLon;
     let maxL = maxLon;
     if (abs(maxL - minL) < 1e-6) { minL -= 1; maxL += 1; }
-    // Linear mapping longitude -> local X coordinate within the map
     return map(lon, minL, maxL, left, right);
 }
 
-// Y linear projection internal to the map (inverted: higher lat -> lower Y)
+// Y linear projection internal to the map (inverted: higher lat -> lower Y) (unchanged)
 function projectY(lat) {
     const top = MAP_INNER_MARGIN;
     const bottom = MAP_HEIGHT - MAP_INNER_MARGIN;
     let minL = minLat;
     let maxL = maxLat;
     if (abs(maxL - minL) < 1e-6) { minL -= 1; maxL += 1; }
-    // Linear mapping latitude -> local Y coordinate within the map (inverted)
     return map(lat, minL, maxL, bottom, top);
 }
 
-// Drawing function for the 9 glyphs
+// Drawing function for the 9 glyphs (unchanged)
 function drawGlyph(x, y, glyphIndex, s) {
     push();
     translate(x, y);
@@ -232,15 +226,27 @@ function drawGlyph(x, y, glyphIndex, s) {
         case 7: // Subglacial: square
             rect(0, 0, s * 0.9, s * 0.9);
             break;
-        case 8: // Submarine: triangle with wave
+case 8: // Submarine: triangle with wave (MODIFICATO: onda sopra il triangolo invertito)
+case 8: // Submarine: triangle with wave (MODIFICATO: onda sopra la punta del triangolo verso l'alto)
+            // Triangolo originale (punta in alto)
             triangle(-s*0.8, s*0.5, s*0.8, s*0.5, 0, -s*0.8);
+            
+            // Disegna l'onda sopra la punta
             stroke(lerpColor(color(COLOR_LOW), color(COLOR_HIGH), 0.25));
             strokeWeight(max(1, s * 0.06));
             noFill();
+            
+            push(); // Isola la trasformazione dell'onda
+            translate(0, -s*1.0); // Sposta l'onda più in alto, sopra la punta
+            
             beginShape();
-            vertex(-s*0.7, s*0.65);
-            quadraticVertex(0, s*0.55, s*0.7, s*0.65);
+            // Punti di inizio e fine dell'onda, centrati sulla punta
+            vertex(-s*0.4, 0); 
+            // Punto di controllo (il vertice dell'onda)
+            quadraticVertex(0, -s*0.2, s*0.4, 0); 
             endShape();
+            pop(); 
+            
             noStroke();
             break;
         default: // Fallback: simple circle
@@ -250,7 +256,7 @@ function drawGlyph(x, y, glyphIndex, s) {
     pop();
 }
 
-// Returns an interpolated color based on elevation
+// Returns an interpolated color based on elevation (unchanged)
 function getColorForElevation(elevation) {
     let normalizedElevation = map(elevation, minElevation, maxElevation, 0, 1);
     let lowColor = color(COLOR_LOW);
@@ -258,34 +264,91 @@ function getColorForElevation(elevation) {
     return lerpColor(lowColor, highColor, normalizedElevation);
 }
 
+// Draw the type filter panel (MODIFICATA: aggiunge il glifo)
+function drawFilterPanel(x, y, w, h) {
+    push();
+    translate(x, y);
+    noStroke();
+    fill('#1E1E1E');
+    rect(0, 0, w, h, 6);
+
+    fill('#FFF');
+    textSize(16);
+    textStyle(BOLD);
+    textAlign(LEFT, TOP);
+    text("Filtro per Tipo", PANEL_PAD, 10);
+
+    const startY = 36;
+    const itemH = 32;
+    // Dimensione ridotta del glifo nel pannello filtro
+    const glyphPanelSize = 10; 
+    const glyphX = PANEL_PAD + 10; // Posizione X del glifo
+    const textX = glyphX + glyphPanelSize + 6; // Posizione X del testo, spostato a destra
+
+    for (let i = 0; i < filterOptions.length; i++) {
+        const type = filterOptions[i];
+        const itemY = startY + i * itemH;
+        const isSelected = type === activeTypeFilter;
+        const centerGlyphY = itemY + itemH / 2;
+
+        // Draw selection background
+        if (isSelected) {
+            fill('#333333');
+            rect(PANEL_PAD / 2, itemY, w - PANEL_PAD, itemH, 4);
+        }
+
+        // Draw GLYPH for the specific type
+        if (type !== 'All Types') {
+            const glyphIndex = glyphMap[type];
+            // Usa un colore neutro per il glifo nel pannello filtro (bianco)
+            fill('#FFFFFF'); 
+            stroke('#121212');
+            strokeWeight(0.5);
+            drawGlyph(glyphX, centerGlyphY, glyphIndex, glyphPanelSize);
+        } else {
+            // Per l'opzione "All Types" disegna un piccolo cerchio come placeholder
+            fill('#AAAAAA');
+            ellipse(glyphX, centerGlyphY, 6, 6);
+        }
+
+        // Draw text
+        fill(isSelected ? '#FFFFFF' : '#AAAAAA');
+        textSize(12); // Dimensione testo leggermente ridotta
+        textStyle(isSelected ? BOLD : NORMAL);
+        textAlign(LEFT, CENTER);
+        text(type, textX, centerGlyphY);
+    }
+    pop();
+}
+
 // Main drawing function: legend, filter, map, info panel
 function draw() {
     background('#121212'); 
 
-    // 1. MAP POSITION CALCULATION (Y)
+    // 1. CALCOLO POSIZIONE (Y)
     const AVAILABLE_Y_START = LEGEND_HEIGHT + OUTER_MARGIN + LEGEND_GUTTER;
     const AVAILABLE_Y_END = CANVAS_HEIGHT - OUTER_MARGIN;
     const MAP_TOTAL_H = MAP_HEIGHT + INNER_PAD * 2 + 20; 
-    const MAP_Y_OFFSET = AVAILABLE_Y_START + (AVAILABLE_Y_END - AVAILABLE_Y_START - MAP_TOTAL_H) / 2;
+    mapYOffset = AVAILABLE_Y_START + (AVAILABLE_Y_END - AVAILABLE_Y_START - MAP_TOTAL_H) / 2; 
 
     // 2. DRAW LEGEND (TOP)
     drawLegend(OUTER_MARGIN, OUTER_MARGIN, CANVAS_WIDTH - 2 * OUTER_MARGIN, LEGEND_HEIGHT - 2 * OUTER_MARGIN);
 
     // 3. DRAW FILTER PANEL (LEFT SIDEBAR)
     const filterPanelX = OUTER_MARGIN;
-    const filterPanelY = MAP_Y_OFFSET;
+    const filterPanelY = mapYOffset;
     const filterPanelW = SIDEBAR_WIDTH - 4; 
     const filterPanelH = MAP_HEIGHT + INNER_PAD * 2 + 20; 
     drawFilterPanel(filterPanelX, filterPanelY, filterPanelW, filterPanelH);
 
-    // 4. MAP POSITION CALCULATION (X) AND DRAWING
+    // 4. CALCOLO POSIZIONE (X) E DISEGNO MAPPA
     const availableWidthForMap = CANVAS_WIDTH - SIDEBAR_WIDTH - INFO_WIDTH - 2 * OUTER_MARGIN - INNER_PAD;
-    const mapXStart = OUTER_MARGIN + SIDEBAR_WIDTH + INNER_PAD + max(0, (availableWidthForMap - MAP_WIDTH) / 2);
+    mapXStart = OUTER_MARGIN + SIDEBAR_WIDTH + INNER_PAD + max(0, (availableWidthForMap - MAP_WIDTH) / 2);
     
     push();
-    translate(mapXStart, MAP_Y_OFFSET);
+    translate(mapXStart, mapYOffset);
 
-    // External title above the map
+    // External title above the map (unchanged)
     fill('#FFF');
     noStroke();
     textSize(18);
@@ -294,23 +357,22 @@ function draw() {
     const titleY = -8;
     text("Distribuzione Globale dei Vulcani (Proiezione lineare)", 0, titleY);
     
-    // Map background (black area)
+    // Map background (unchanged)
     fill('#000000'); 
     rect(0, 0, MAP_WIDTH, MAP_HEIGHT); 
 
-    // Map border
+    // Map border (unchanged)
     noFill();
     stroke('#333333');
     strokeWeight(1);
     rect(0, 0, MAP_WIDTH, MAP_HEIGHT);
     
-    // Drawing volcanoes and checking for mouse hover
+    // Drawing volcanoes and checking for mouse hover (unchanged logic)
     let hovered = null; 
     let hoveredLocal = null; 
 
-    // Iterate over all volcanoes
     volcanoes.forEach(v => {
-        // FILTERING: skip drawing if the type is not the active filter
+        // FILTRO: Disegna solo se il filtro è 'All Types' O se il tipo corrisponde.
         if (activeTypeFilter !== 'All Types' && v.type !== activeTypeFilter) {
             return; 
         }
@@ -318,11 +380,12 @@ function draw() {
         const xLocal = projectX(v.lon);
         const yLocal = projectY(v.lat);
         const xGlobal = mapXStart + xLocal;
-        const yGlobal = MAP_Y_OFFSET + yLocal;
+        const yGlobal = mapYOffset + yLocal;
 
         // Distance calculation for hover
         const d = dist(mouseX, mouseY, xGlobal, yGlobal);
         const hitR = max(8, GLYPH_SIZE * 1.2);
+        
         if (d < hitR) {
             hovered = { v: v, x: xGlobal, y: yGlobal };
             hoveredLocal = { v: v, xLocal: xLocal, yLocal: yLocal, glyphIndex: glyphMap[v.type] };
@@ -337,7 +400,7 @@ function draw() {
     });
 
     // If a volcano is hovered, redraw it in the foreground, larger
-    if (hoveredLocal) {
+    if (hoveredLocal && (activeTypeFilter === 'All Types' || hoveredLocal.v.type === activeTypeFilter)) {
         const v = hoveredLocal.v;
         const glowSize = GLYPH_SIZE * 1.8;
         const baseColor = getColorForElevation(v.elevation);
@@ -349,30 +412,28 @@ function draw() {
         strokeWeight(1.5);
         drawGlyph(hoveredLocal.xLocal, hoveredLocal.yLocal, hoveredLocal.glyphIndex, glowSize);
         pop();
+    } else {
+        hovered = null; 
     }
 
-    // Function to draw crosshair and rotated labels
+    // Function to draw crosshair and rotated labels (unchanged)
     (function drawCrosshairAndLabels() {
         const mx = mouseX - mapXStart;
-        const my = mouseY - MAP_Y_OFFSET;
-        // Check if the mouse is over the map area
-        const overMap = mouseX >= mapXStart && mouseX <= mapXStart + MAP_WIDTH && mouseY >= MAP_Y_OFFSET && mouseY <= MAP_Y_OFFSET + MAP_HEIGHT;
+        const my = mouseY - mapYOffset;
+        const overMap = mouseX >= mapXStart && mouseX <= mapXStart + MAP_WIDTH && mouseY >= mapYOffset && mouseY <= mapYOffset + MAP_HEIGHT;
 
         if (!overMap) return;
 
-        // Constrain coordinates within the map
         const mxLocal = constrain(mx, 0, MAP_WIDTH);
         const myLocal = constrain(my, 0, MAP_HEIGHT);
 
-        // Draw crosshair lines
         push();
         stroke('#888888');
         strokeWeight(1);
-        line(mxLocal, 0, mxLocal, MAP_HEIGHT); // Vertical
-        line(0, myLocal, MAP_WIDTH, myLocal); // Horizontal
+        line(mxLocal, 0, mxLocal, MAP_HEIGHT); 
+        line(0, myLocal, MAP_WIDTH, myLocal); 
         pop();
 
-        // Calculate lon/lat (inverse projection)
         const left = MAP_INNER_MARGIN;
         const right = MAP_WIDTH - MAP_INNER_MARGIN;
         const top = MAP_INNER_MARGIN;
@@ -383,7 +444,7 @@ function draw() {
         const labelW = 110;
         const labelH = 20;
 
-        // LONGITUDE LABEL (Bottom, horizontal)
+        // LONGITUDE LABEL
         push();
         rectMode(CENTER);
         fill('#0A0A0A');
@@ -396,38 +457,32 @@ function draw() {
         text(`Lon: ${nf(lonVal, 0, 4)}°`, mxLocal, MAP_HEIGHT + 12);
         pop();
 
-        // LATITUDE LABEL (Left, ROTATED)
-        // X position of the rotated box center to be flush with the map edge (X=0)
+        // LATITUDE LABEL 
         const latLabelX = - (labelH / 2 + 2); 
         
         push();
-        // 1. Translate origin to the center of the label position (along the horizontal line myLocal)
         translate(latLabelX, myLocal);
-        // 2. Rotate the coordinate system 90 degrees clockwise
         rotate(90);
         
         rectMode(CENTER);
-        
-        // 3. Draw background (the rectangle is rotated, so it's vertical)
         fill('#0A0A0A');
         stroke('#222');
         rect(0, 0, labelW, labelH, 4); 
         
-        // 4. Draw rotated text
         noStroke();
         fill('#FFFFFF');
         textSize(12);
         textAlign(CENTER, CENTER);
         text(`Lat: ${nf(latVal, 0, 4)}°`, 0, 0); 
         
-        pop(); // Restore coordinate system
+        pop(); 
     })();
     
     pop(); 
     
-    // 5. DRAW INFORMATION PANEL (RIGHT)
+    // 5. DRAW INFORMATION PANEL (RIGHT) (unchanged logic)
     const infoX = mapXStart + MAP_WIDTH + 16;
-    const infoY = MAP_Y_OFFSET;
+    const infoY = mapYOffset;
     const panelW = INFO_WIDTH - 16;
     const panelH = MAP_HEIGHT + INNER_PAD * 2 + 20; 
 
@@ -496,83 +551,20 @@ function draw() {
             textAlign(LEFT, TOP);
             text(value, boxX + 8, y + 6 + 14);
             textStyle(NORMAL);
+        } else {
+             fill('#FFFFFF');
+             textSize(13);
+             textStyle(BOLD);
+             textAlign(LEFT, TOP);
+             text('—', boxX + 8, y + 6 + 14);
+             textStyle(NORMAL);
         }
     }
 
     pop();
 }
 
-// Draw the filter control panel (SIDEBAR)
-function drawFilterPanel(x, y, w, h) {
-    push();
-    translate(x, y);
-
-    // Filter panel background
-    fill('#1E1E1E');
-    rect(0, 0, w, h, 6);
-
-    // Title
-    fill('#FFF');
-    textSize(16);
-    textStyle(BOLD);
-    textAlign(LEFT, TOP);
-    text("Filtra per Tipo", PANEL_PAD, 10);
-
-    const startY = 36;
-    const itemH = 32;
-    const textX = PANEL_PAD + 26; // Space for glyph
-    
-    textSize(12);
-    textStyle(NORMAL);
-    
-    // Draw filter options
-    filterOptions.forEach((type, index) => {
-        const itemY = startY + index * itemH;
-        
-        // Check if the mouse is over the element
-        const isHover = mouseX >= x && mouseX <= x + w && mouseY >= y + itemY && mouseY <= y + itemY + itemH;
-        
-        // Option background
-        if (type === activeTypeFilter) {
-            fill('#444444'); // Color for active filter
-            rect(0, itemY, w, itemH, 4);
-        } else if (isHover) {
-            fill('#292929'); // Color for hover
-            rect(0, itemY, w, itemH, 4);
-        } else {
-             fill('#1E1E1E'); // Normal background
-             rect(0, itemY, w, itemH);
-        }
-        
-        // Text for the volcano type
-        fill(type === activeTypeFilter ? '#FFD700' : '#FFFFFF'); // Highlight active text
-        textAlign(LEFT, CENTER);
-        const displayName = type === 'All Types' ? 'Tutti i Tipi' : type;
-        text(displayName, textX, itemY + itemH / 2);
-        
-        // Draw the glyph only if it's not 'All Types'
-        if (type !== 'All Types') {
-            const glyphIndex = glyphMap[type];
-            push();
-            fill(type === activeTypeFilter ? '#FFD700' : '#FFFFFF'); // Active glyph color
-            noStroke();
-            drawGlyph(PANEL_PAD + 10, itemY + itemH / 2, glyphIndex, GLYPH_SIZE * 0.6);
-            pop();
-        } else {
-             // Icon for "All Types" (e.g., a square)
-            push();
-            fill(type === activeTypeFilter ? '#FFD700' : '#FFFFFF');
-            noStroke();
-            rectMode(CENTER);
-            rect(PANEL_PAD + 10, itemY + itemH / 2, GLYPH_SIZE * 0.6, GLYPH_SIZE * 0.6, 2);
-            pop();
-        }
-    });
-
-    pop();
-}
-
-// Draw legend: elevation colors and typological glyphs
+// Draw legend: elevation colors (unchanged)
 function drawLegend(xOffset, yOffset, width, height) {
     push();
     translate(xOffset + PANEL_PAD, yOffset);
@@ -587,14 +579,15 @@ function drawLegend(xOffset, yOffset, width, height) {
     let cursorX = 0;
     let cursorY = 32;
 
-    // Color section (elevation) with gradient bar
+    // Sezione Colore (Elevazione) con barra del gradiente estesa
     textSize(14);
     textStyle(NORMAL);
     fill('#FFF');
     text("Colore (Elevazione):", cursorX, cursorY);
     cursorY += 18;
 
-    const BAR_W = min(240, width / 2 - 40); 
+    // Estende la barra del gradiente fino quasi alla fine della legenda (come richiesto)
+    const BAR_W = width - (cursorX + 2 * PANEL_PAD); 
     const BAR_H = 14;
     for (let i = 0; i < BAR_W; i++) {
         let inter = map(i, 0, BAR_W, 0, 1);
@@ -604,78 +597,42 @@ function drawLegend(xOffset, yOffset, width, height) {
     }
     noStroke();
 
-    // Min/max elevation labels
+    // Etichette Min/Max Elevazione
     fill('#FFF');
     textSize(10);
     textAlign(LEFT, TOP);
-    text(`${minElevation} m (Basso)`, cursorX, cursorY + BAR_H + 8);
+    text(`${nf(minElevation, 0, 0)} m (Basso)`, cursorX, cursorY + BAR_H + 8);
     textAlign(RIGHT, TOP);
-    text(`${maxElevation} m (Alto)`, cursorX + BAR_W, cursorY + BAR_H + 8);
-
-    // Advance cursor for glyph section
-    cursorX += BAR_W + 30;
-    cursorY = 32;
-
-    // Glyph section (typology)
-    textSize(14);
-    textAlign(LEFT, TOP);
-    fill('#FFF');
-    text("Glifi (Tipologia):", cursorX, cursorY);
-    cursorY += 18;
-
-    const uniqueTypes = Object.keys(glyphMap).sort();
-    const COLUMNS = 3;
-    const ITEM_H = 28; 
-    const ITEM_W = max(110, (width - cursorX - PANEL_PAD) / COLUMNS); 
-
-    // Draw glyphs
-    uniqueTypes.forEach((type, index) => {
-        const col = index % COLUMNS;
-        const row = floor(index / COLUMNS);
-
-        const gx = cursorX + col * ITEM_W;
-        const gy = cursorY + row * ITEM_H;
-
-        push();
-        fill('#FFF');
-        noStroke();
-        drawGlyph(gx + 8, gy + 8, glyphMap[type], GLYPH_SIZE * 0.8);
-        pop();
-
-        fill('#FFF');
-        textSize(12);
-        textAlign(LEFT, CENTER);
-        text(type, gx + 22, gy + 8);
-    });
+    text(`${nf(maxElevation, 0, 0)} m (Alto)`, cursorX + BAR_W, cursorY + BAR_H + 8);
 
     pop();
 }
 
-// Handles mouse click for the filter
 function mousePressed() {
+    // Il calcolo delle coordinate si basa sulle variabili globali aggiornate in draw()
     const filterPanelX = OUTER_MARGIN;
-    const filterPanelY = MAP_Y_OFFSET;
+    const filterPanelY = mapYOffset; 
     const filterPanelW = SIDEBAR_WIDTH - 4;
     const filterPanelH = MAP_HEIGHT + INNER_PAD * 2 + 20;
 
-    // Check if the click is within the filter panel area
+    // 1. Controlla se il click è avvenuto nel pannello filtro
     if (mouseX >= filterPanelX && mouseX <= filterPanelX + filterPanelW &&
         mouseY >= filterPanelY && mouseY <= filterPanelY + filterPanelH) {
         
-        // Y position relative to the content area
         const clickY = mouseY - filterPanelY;
         const startY = 36;
         const itemH = 32;
 
-        // Check which filter element was clicked
+        // 2. Trova quale opzione è stata cliccata
         for (let index = 0; index < filterOptions.length; index++) {
             const type = filterOptions[index];
             const itemY = startY + index * itemH;
 
-            if (clickY >= itemY && clickY <= itemY + itemH) {
-                // Update the active filter and redraw
+            if (clickY >= itemY && clickY < itemY + itemH) { 
+                // 3. AGGIORNA il filtro attivo
                 activeTypeFilter = type;
-                redraw();
+                // 4. RICHIAMA DRAW
+                redraw(); 
                 return; 
             }
         }
